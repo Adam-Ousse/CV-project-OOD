@@ -169,22 +169,22 @@ def train_model():
         print(f'train loss: {train_loss:.3f}, train acc: {train_acc:.2f}%')
         print(f'val loss: {val_loss:.3f}, val acc: {val_acc:.2f}%')
 
-        # extract clean (no-aug) features for NC metrics
+        # clean features for nc metrics
         layer_features, labels = extract_features_with_model(model, clean_loader, config.DEVICE)
 
-        # NC1-NC4: computed on avgpool (final pre-classifier) features
+        # nc1-nc4 on avgpool features
         avgpool_features = layer_features['avgpool']
         nc_metrics, avgpool_means, avgpool_global_mean = nc_tracker.compute_all_metrics(
             avgpool_features, labels, model.model.fc
         )
 
-        # NC5: cross-layer subspace orthogonality using centered class means
+        # nc5: cross-layer CKA
         layer_means_dict = {}
         for layer_name in ['layer1', 'layer2', 'layer3', 'layer4', 'avgpool']:
             if layer_name in layer_features:
                 features = layer_features[layer_name]
                 means, global_mean, _, _ = nc_tracker._compute_moments(features, labels)
-                centered_means = means - global_mean.unsqueeze(1)  # [p, C]
+                centered_means = means - global_mean.unsqueeze(1)
                 layer_means_dict[layer_name] = centered_means
 
         nc5_metrics = nc_tracker.compute_nc5_cross_layer(layer_means_dict)
@@ -216,19 +216,19 @@ def train_model():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_acc': val_acc,
             }, os.path.join(config.CHECKPOINT_DIR, 'best_model.pth'))
-            print(f'  ↑ new best val acc: {val_acc:.2f}% — checkpoint saved')
+            print(f'  new best val acc: {val_acc:.2f}% - checkpoint saved')
 
-    # Final test evaluation
+    # final test evaluation
     test_loss, test_acc = validate(model, test_loader, criterion, config.DEVICE)
     print(f'\nfinal test acc: {test_acc:.2f}%')
 
-    # Save NC metrics CSV
+    # save nc metrics csv
     nc_df = pd.DataFrame(nc_metrics_list)
     nc_csv_path = os.path.join(config.RESULTS_DIR, 'nc_metrics.csv')
     nc_df.to_csv(nc_csv_path, index=False)
     print(f'NC metrics saved to {nc_csv_path}')
 
-    # Save final checkpoint
+    # save final checkpoint
     torch.save({
         'model_state_dict': model.state_dict(),
         'train_losses': train_losses,
@@ -239,7 +239,7 @@ def train_model():
         'nc_history': nc_tracker.get_history(),
     }, os.path.join(config.CHECKPOINT_DIR, 'final_model.pth'))
 
-    # Clean up hooks
+    # clean up hooks
     model.remove_hooks()
 
     return model, nc_df

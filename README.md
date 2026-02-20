@@ -1,6 +1,6 @@
 # OOD Detection and Neural Collapse
 
-**Deep Learning in Computer Vision — ENSTA Paris / IP Paris, 2025–2026**
+**Deep Learning in Computer Vision, ENSTA Paris / IP Paris, 2025-2026**
 
 ---
 
@@ -17,9 +17,9 @@
 
 This project studies two closely related topics in deep learning:
 
-1. **Out-of-Distribution (OOD) Detection** — given a classifier trained on CIFAR-100, can we detect at inference time whether an input comes from a completely different distribution? We implement and benchmark six OOD scoring methods: MSP, Max Logit, Energy, Mahalanobis, ViM, and NECO.
+1. **Out-of-Distribution (OOD) Detection:** given a classifier trained on CIFAR-100, can we detect at inference time whether an input comes from a completely different distribution? We implement and benchmark six OOD scoring methods: MSP, Max Logit, Energy, Mahalanobis, ViM, and NECO.
 
-2. **Neural Collapse** — a geometric phenomenon observed near the end of training, where last-layer features and classifier weights converge to a highly structured configuration (a simplex Equiangular Tight Frame). We track four collapse metrics (NC1–NC4) throughout training and visualize the resulting geometry.
+2. **Neural Collapse:** a geometric phenomenon observed near the end of training, where last-layer features and classifier weights converge to a highly structured configuration (a simplex Equiangular Tight Frame). We track four collapse metrics (NC1-NC4) throughout training and visualize the resulting geometry.
 
 We also investigate how data augmentation affects both OOD performance and the Neural Collapse dynamic.
 
@@ -45,8 +45,8 @@ We also investigate how data augmentation affects both OOD performance and the N
 ├── data/                     # Datasets (CIFAR-100, CIFAR-10, MNIST, SVHN, DTD, Tiny-ImageNet)
 ├── checkpoints/              # Saved model weights
 └── results/
-    ├── with aug/             # Figures and CSVs — augmented model
-    └── no aug/               # Figures and CSVs — baseline model
+    ├── with aug/             # figures and CSVs, augmented model
+    └── no aug/               # figures and CSVs, baseline model
 ```
 
 ---

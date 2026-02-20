@@ -10,12 +10,6 @@ class NCMetrics:
         self.history = defaultdict(list)
         
     def compute_all_metrics(self, features, labels, classifier):
-        """
-        Compute NC1-NC4 for last-layer features.
-        features: [N, p] last-layer activations h(x)
-        labels: [N] class labels  
-        classifier: nn.Linear with weight [C, p] and bias [C]
-        """
         metrics = {}
         means, global_mean, within_cov, between_cov = self._compute_moments(features, labels)
         metrics['nc1'] = self._compute_nc1(within_cov, between_cov)
@@ -29,34 +23,28 @@ class NCMetrics:
         return metrics, means, global_mean
     
     def compute_nc5_cross_layer(self, layer_means_dict):
-        """
-        NC5: Cross-layer decorrelation.
-        Measures orthogonality of class mean subspaces across layers.
-        """
+        # cross-layer gram correlation and linear CKA
         if len(layer_means_dict) < 2:
             return {'nc5_correlation': 0.0, 'nc5_cka': 0.0}
         
         layer_names = list(layer_means_dict.keys())
         n_layers = len(layer_names)
         
-        # Build normalized Gram matrices per layer.
-        # means shape: [p, C] — normalize each class column to unit norm.
+        # normalize each layer's class means
         normalized_means = {}
         for name, means in layer_means_dict.items():
-            # means: [p, C]; normalize along dim=0 (per-class column vectors)
-            norms = torch.norm(means, dim=0, keepdim=True)  # [1, C]
-            normalized_means[name] = means / (norms + 1e-10)  # [p, C]
+            norms = torch.norm(means, dim=0, keepdim=True)
+            normalized_means[name] = means / (norms + 1e-10)
         
-        # Pairwise Gram matrix correlations
+        # pairwise gram correlations
         correlations = []
         for i in range(n_layers):
             for j in range(i + 1, n_layers):
-                m1 = normalized_means[layer_names[i]]  # [p1, C]
-                m2 = normalized_means[layer_names[j]]  # [p2, C]
+                m1 = normalized_means[layer_names[i]]
+                m2 = normalized_means[layer_names[j]]
                 
-                # Gram matrices are [C, C]
-                gram1 = m1.T @ m1   # [C, C]
-                gram2 = m2.T @ m2   # [C, C]
+                gram1 = m1.T @ m1
+                gram2 = m2.T @ m2
                 
                 g1_norm = torch.norm(gram1, p='fro')
                 g2_norm = torch.norm(gram2, p='fro')
@@ -68,18 +56,15 @@ class NCMetrics:
         
         avg_correlation = np.mean(correlations) if correlations else 0.0
         
-        # linear CKA between layers (more informative than principal angles
-        # which are degenerate when subspace dim ≈ ambient dim)
+        # linear CKA
         cka_values = []
         for i in range(n_layers):
             for j in range(i + 1, n_layers):
-                m1 = layer_means_dict[layer_names[i]]  # [p1, C]
-                m2 = layer_means_dict[layer_names[j]]  # [p2, C]
+                m1 = layer_means_dict[layer_names[i]]
+                m2 = layer_means_dict[layer_names[j]]
                 
-                # linear CKA: HSIC(K1, K2) / sqrt(HSIC(K1,K1) * HSIC(K2,K2))
-                # K = X^T X where X is [p, C], so K is [C, C]
-                k1 = m1.T @ m1  # [C, C]
-                k2 = m2.T @ m2  # [C, C]
+                k1 = m1.T @ m1
+                k2 = m2.T @ m2
                 
                 hsic_12 = (k1 * k2).sum().item()
                 hsic_11 = (k1 * k1).sum().item()
@@ -159,32 +144,24 @@ class NCMetrics:
         return nc2, nc2_cos
     
     def _compute_nc3(self, means, global_mean, classifier):
-        """
-        NC3: Self-duality.
-        For each class c, the classifier weight w_c should be parallel to
-        the centered class mean (mu_c - mu_G). We measure this per-class
-        and average, which is invariant to scale differences between W and M.
-        """
-        W = classifier.weight.data        # [C, p]
-        M_dot = (means - global_mean.unsqueeze(1)).T  # [C, p]  (centered class means)
+        W = classifier.weight.data
+        M_dot = (means - global_mean.unsqueeze(1)).T
         
-        # Per-class cosine similarity between w_c and (mu_c - mu_G)
-        w_norms = torch.norm(W, dim=1, keepdim=True)        # [C, 1]
-        m_norms = torch.norm(M_dot, dim=1, keepdim=True)    # [C, 1]
+        w_norms = torch.norm(W, dim=1, keepdim=True)
+        m_norms = torch.norm(M_dot, dim=1, keepdim=True)
         
         valid = (w_norms.squeeze() > 1e-10) & (m_norms.squeeze() > 1e-10)
         
         if valid.sum() == 0:
             return 1.0, float('inf')
         
-        W_n = W[valid] / w_norms[valid]        # [V, p]
-        M_n = M_dot[valid] / m_norms[valid]    # [V, p]
+        W_n = W[valid] / w_norms[valid]
+        M_n = M_dot[valid] / m_norms[valid]
         
-        # Cosine similarity per class, then average
-        cosines = (W_n * M_n).sum(dim=1)       # [V]
-        nc3 = (1.0 - cosines).mean().item()    # 0 = perfect alignment
+        cosines = (W_n * M_n).sum(dim=1)
+        nc3 = (1.0 - cosines).mean().item()  # 0 = perfect alignment
         
-        # Frobenius distance after per-class normalisation (scale-free)
+        # frobenius distance after per-class normalisation
         nc3_dist = torch.norm(W_n - M_n, p='fro').item() ** 2 / valid.sum().item()
         
         return nc3, nc3_dist

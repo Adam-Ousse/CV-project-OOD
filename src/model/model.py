@@ -49,7 +49,7 @@ class ResNet18Classifier(nn.Module):
                 handle = layer_map[name].register_forward_hook(make_hook(name))
                 self._hooks.append(handle)
             else:
-                print(f"Warning: Layer {name} not found in model")
+                print(f"warning: layer {name} not found")
     
     def remove_hooks(self):
         for hook in self._hooks:

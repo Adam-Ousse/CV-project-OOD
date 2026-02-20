@@ -133,8 +133,7 @@ def main():
     maha.fit(train_features, train_labels)
 
     print('fitting vim...')
-    # null space dim = num_classes (100); principal subspace = feature_dim - num_classes
-    feature_dim = train_features.shape[1]  # 512 for resnet-18
+    feature_dim = train_features.shape[1]  # 512
     vim = VimDetector(dim=feature_dim - config.NUM_CLASSES)
     vim.fit(train_features, train_logits)
 

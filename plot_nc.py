@@ -20,10 +20,6 @@ csv_path = os.path.join(config.RESULTS_DIR, 'nc_metrics.csv')
 df = pd.read_csv(csv_path)
 
 
-# ---------------------------------------------------------------------------
-# helpers: load model + compute geometry from final checkpoint
-# ---------------------------------------------------------------------------
-
 def load_model():
     ckpt = torch.load(os.path.join(config.CHECKPOINT_DIR, 'best_model.pth'),
                       map_location=config.DEVICE)
@@ -34,7 +30,6 @@ def load_model():
 
 
 def extract_all_features(model, loader):
-    """returns avgpool features [N,512], labels [N], and per-layer features dict."""
     model.eval()
     feats, labs = [], []
     layer_accum = {l: [] for l in ['layer1', 'layer2', 'layer3', 'layer4', 'avgpool']}
@@ -54,13 +49,6 @@ def extract_all_features(model, loader):
 
 
 def compute_class_geometry(features, labels, classifier):
-    """
-    returns:
-      means      [C, p]  – class mean vectors
-      global_mean [p]
-      per_class_var [C]  – mean squared distance within class
-      per_class_cos [C]  – cosine sim between w_c and (mu_c - mu_G)
-    """
     C = config.NUM_CLASSES
     features = features.to(config.DEVICE)
     labels   = labels.to(config.DEVICE)
@@ -81,7 +69,6 @@ def compute_class_geometry(features, labels, classifier):
 
 
 def nc1_per_layer(layer_features, labels):
-    """NC1 (Tr Σ_W / Tr Σ_B) for each layer."""
     labels = labels.to(config.DEVICE)
     results = {}
     for name, feats in layer_features.items():
@@ -102,7 +89,6 @@ def nc1_per_layer(layer_features, labels):
         results[name] = tr_w / tr_b if tr_b > 1e-10 else float('inf')
     return results
 
-# --- NC1–NC4 plot (4 rows, 1 col) ---
 fig, axes = plt.subplots(4, 1, figsize=(10, 10), sharex=True)
 
 nc_configs = [
@@ -129,7 +115,6 @@ fig.savefig(os.path.join(config.RESULTS_DIR, 'nc_metrics.pdf'))
 fig.savefig(os.path.join(config.RESULTS_DIR, 'nc_metrics.png'))
 plt.close(fig)
 
-# --- train/val loss + accuracy (2 rows, 1 col) ---
 fig2, (ax_loss, ax_acc) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
 sns.lineplot(x='epoch', y='train_loss', data=df, ax=ax_loss, label='Train', linewidth=1.2)
@@ -157,9 +142,7 @@ plt.close(fig2)
 print(f'saved to {config.RESULTS_DIR}/nc_metrics.pdf and training_curves.pdf')
 
 
-# ---------------------------------------------------------------------------
-# NC5 — cross-layer CKA + correlation over epochs
-# ---------------------------------------------------------------------------
+# nc5 cross-layer cka
 fig5, (ax_cka, ax_corr) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
 sns.lineplot(x='epoch', y='nc5_cka',         data=df, ax=ax_cka,  color='tab:purple', linewidth=1.2)
@@ -180,9 +163,6 @@ plt.close(fig5)
 print('saved nc5_cross_layer.pdf')
 
 
-# ---------------------------------------------------------------------------
-# geometry plots — require loading model + clean train features
-# ---------------------------------------------------------------------------
 print('loading model and computing features for geometry plots...')
 model   = load_model()
 _, _, test_loader, clean_loader = get_cifar100_loaders()
@@ -191,8 +171,7 @@ means, global_mean, per_class_var, per_class_cos = compute_class_geometry(
     features, labels, model.model.fc)
 
 
-# 1. class mean pairwise distance matrix  (100 × 100 heatmap)
-# ---------------------------------------------------------------------------
+# class mean distance matrix
 M_c = (means - global_mean)                          # [C, p] centered
 dists = torch.cdist(M_c, M_c, p=2).numpy()          # [C, C]
 
@@ -208,7 +187,6 @@ fig_d.savefig(os.path.join(config.RESULTS_DIR, 'class_mean_distances.png'))
 plt.close(fig_d)
 print('saved class_mean_distances.pdf')
 
-# also: histogram of off-diagonal distances
 off_diag = dists[np.triu_indices(config.NUM_CLASSES, k=1)]
 fig_dh, ax_dh = plt.subplots(figsize=(7, 4))
 ax_dh.hist(off_diag, bins=60, color='steelblue', edgecolor='white', linewidth=0.3)
@@ -221,8 +199,7 @@ fig_dh.savefig(os.path.join(config.RESULTS_DIR, 'class_mean_dist_hist.png'))
 plt.close(fig_dh)
 
 
-# 2. within-class variance per class  (sorted bar chart)
-# ---------------------------------------------------------------------------
+# within-class variance
 var_np  = per_class_var.numpy()
 order   = np.argsort(var_np)[::-1]
 
@@ -241,8 +218,7 @@ plt.close(fig_v)
 print('saved within_class_variance.pdf')
 
 
-# 3. per-class cosine similarity: classifier weight vs class mean  (NC3)
-# ---------------------------------------------------------------------------
+# nc3 cosine similarity
 cos_np = per_class_cos.numpy()
 order_cos = np.argsort(cos_np)
 
@@ -263,8 +239,7 @@ plt.close(fig_c)
 print('saved cosine_sim_weights_means.pdf')
 
 
-# 4. BONUS — NC1 across layers (bar chart at final epoch)
-# ---------------------------------------------------------------------------
+# nc1 across layers
 layer_nc1 = nc1_per_layer(layer_feats, labels)
 
 layer_names  = list(layer_nc1.keys())

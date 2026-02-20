@@ -43,40 +43,32 @@ class MahalanobisDetector:
             diff = features - self.class_means[c]
             distance = np.sum(diff @ self.precision * diff, axis=1)
             distances.append(distance)
-        # higher score = more likely ID
         return -np.min(distances, axis=0)
 
 
 class VimDetector:
-    """ViM: Virtual logit Matching (Wang et al., CVPR 2022)."""
     def __init__(self, dim=300):
         self.dim = dim
-        self.u = None       # training feature mean
-        self.NS = None      # null space basis
-        self.alpha = None   # calibration constant
+        self.u = None
+        self.NS = None
+        self.alpha = None
 
     def fit(self, features, logits):
-        """
-        features: [N, p] train features
-        logits: [N, C] train logits
-        """
         features = features.cpu().numpy()
         logits = logits.cpu().numpy()
 
         self.u = features.mean(axis=0)
 
-        # covariance of centered features
         ec = EmpiricalCovariance(assume_centered=True)
         ec.fit(features - self.u)
 
-        # eigh for symmetric matrix: guaranteed real, orthonormal eigenvectors, ascending order
+        # eigh: symmetric matrix, ascending eigenvalue order
         eig_vals, eig_vecs = np.linalg.eigh(ec.covariance_)
 
-        # null space = eigenvectors with smallest eigenvalues (after DIM largest)
-        # eigh returns ascending order, so top-dim are at the end
+        # null space: eigenvecs with smallest eigenvalues
         self.NS = np.ascontiguousarray(eig_vecs[:, :-self.dim])
 
-        # calibrate: alpha = mean(energy) / mean(vlogit) per VIM paper
+        # calibrate alpha
         vlogit_train = np.linalg.norm(
             (features - self.u) @ self.NS, axis=-1
         )
@@ -91,13 +83,11 @@ class VimDetector:
             (features - self.u) @ self.NS, axis=-1
         ) * self.alpha
 
-        energy = logsumexp(logits, axis=-1)  # [N]
-        # higher score = more likely ID
+        energy = logsumexp(logits, axis=-1)
         return energy - vlogit
 
 
 class NECODetector:
-    """NECO: Neural Collapse inspired OOD detection (Ammar et al., 2024)."""
     def __init__(self, neco_dim=90, arch='resnet'):
         self.neco_dim = neco_dim
         self.arch = arch
@@ -106,10 +96,8 @@ class NECODetector:
 
     def fit(self, features):
         features = features.cpu().numpy()
-        # standardize features
         self.scaler = StandardScaler()
         scaled = self.scaler.fit_transform(features)
-        # full PCA (all components)
         self.pca = PCA(n_components=features.shape[1])
         self.pca.fit(scaled)
 
@@ -117,18 +105,15 @@ class NECODetector:
         features = features.cpu().numpy()
         logits = logits.cpu().numpy()
 
-        # transform through fitted scaler + PCA
         scaled = self.scaler.transform(features)
         projected_all = self.pca.transform(scaled)
 
-        # take first neco_dim components (ETF subspace)
+        # etf subspace
         projected_reduced = projected_all[:, :self.neco_dim]
 
-        # ratio = norm in ETF subspace / norm in full (scaled) space
         norm_reduced = np.linalg.norm(projected_reduced, axis=1)
         norm_full = np.linalg.norm(scaled, axis=1) + 1e-8
         ratio = norm_reduced / norm_full
 
-        # neco score = ratio * energy per original paper
         energy = logsumexp(logits, axis=-1)
         return ratio * energy
