@@ -183,3 +183,6 @@ cython_debug/
 # Ignore root data/ directory (datasets) but track src/data/ (Python module)
 /data/
 !src/data/
+checkpoints/
+references.bib
+main.tex
